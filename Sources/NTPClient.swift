@@ -67,9 +67,29 @@ final class NTPClient {
     }
 
     private let referenceTimeLock: GCDLock<ReferenceTime?> = GCDLock(value: nil)
+    private let referenceUptime_tv_secKey = "true_time_reference_uptime_tv_sec"
+    private let referenceUptime_tv_usecKey = "true_time_reference_uptime_tv_usec"
+    private let cacheTimeReferenceKey = "true_time_cache_time_reference_key"
     var referenceTime: ReferenceTime? {
-        get { return referenceTimeLock.read() }
-        set { referenceTimeLock.write(newValue) }
+        get {
+            guard let valueToReturn = referenceTimeLock.read() else {
+                let defaults = UserDefaults.standard
+                if let cacheTime = defaults.value(forKey: cacheTimeReferenceKey) as? Date,  let referenceUptime_tv_sec = defaults.value(forKey: referenceUptime_tv_secKey) as? __darwin_time_t, let referenceUptime_tv_usec = defaults.value(forKey: referenceUptime_tv_usecKey) as? __darwin_suseconds_t, !reachability.online {
+                   return ReferenceTime(time: cacheTime, uptime: timeval(tv_sec: referenceUptime_tv_sec, tv_usec: referenceUptime_tv_usec))
+                }
+                return nil
+            }
+            return valueToReturn
+        }
+        set {
+            if let newValueUnwrapped = newValue {
+                let defaults = UserDefaults.standard
+                defaults.set(newValueUnwrapped.time, forKey: cacheTimeReferenceKey)
+                defaults.set(newValueUnwrapped.uptime.tv_sec, forKey: referenceUptime_tv_secKey)
+                defaults.set(newValueUnwrapped.uptime.tv_usec, forKey: referenceUptime_tv_usecKey)
+            }
+            referenceTimeLock.write(newValue)
+        }
     }
 
     fileprivate func debugLog(_ message: @autoclosure () -> String) {
